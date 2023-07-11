@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!-- generated from upstream -->
+  <link rel="stylesheet" media="all" href="styles/font-awesome.css" />
+  <link rel="stylesheet" media="all" href="styles/mastodon.css" />
+
+  <script>
+    async function loadFeeds() {
+      // parse arguments
+      let args = new URLSearchParams(document.location.search);
+
+      let site = args.get('site') || 'mastodon.social';
+      let name = args.get('name') || 'mastodon';
+      let lim  = args.get('lim' ) || '10';
+
+      let user = await (await fetch(`https://${site}/api/v1/accounts/lookup?acct=${name}`)).json();
+      let feed = await (await fetch(`https://${site}/api/v1/accounts/${user["id"]}/statuses?limit=${lim}`)).json();
+
+      // generate header
+      var div = document.getElementById("placeholder");
+      div.innerHTML = `
+<div class="account-timeline__header">
+  <div class="account__header">
+    <div class="account__header__image">
+      <div class="account__header__info"></div>
+      <img src="${user.header}" alt="" class="parallax">
+    </div>
+    <div class="account__header__bar">
+      <div class="account__header__tabs">
+        <a class="avatar" href="${user.avatar}" rel="noopener noreferrer" target="_blank">
+          <div class="account__avatar" style="width: 90px; height: 90px;">
+            <img src="${user.avatar}" alt="${user.username}">
+          </div>
+        </a>
+        <div class="account__header__tabs__buttons">
+          <button class="button logo-button" type="button" onclick="window.open('https://${site}/@${user.acct}', '_blank')">Follow</button>
+        </div>
+      </div>
+      <div class="account__header__tabs__name">
+        <h1>
+          <span>${user.username}</span>
+          <small>
+            <span>@${user.acct}@${site}</span>
+          </small>
+        </h1>
+      </div>
+      <div class="account__header__extra">
+        <div class="account__header__extra__links">
+          <a class="active" aria-current="page" title="${user.statuses_count}" href="https://${site}/@${user.acct}">
+            <span>
+              <strong>
+                <span>${user.statuses_count}</span>
+              </strong> Posts </span>
+          </a>
+          <a title="${user.following_count}" href="https://${site}/@${user.acct}/following">
+            <span>
+              <strong>
+                <span>${user.following_count}</span>
+              </strong> Following </span>
+          </a>
+          <a title="${user.followers_count}" href="https://${site}/@${user.acct}/followers">
+            <span>
+              <strong>
+                <span>${user.followers_count}</span>
+              </strong> Followers </span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>`;
+
+      // generate toots
+      for (let i = 0; i < feed.length; i++) {
+        var article = document.createElement("article");
+        var curr    = feed[i];
+
+        article.setAttribute("aria-posinset", `${i}`);
+        article.setAttribute("aria-setsize",  `${feed.length}`);
+        article.setAttribute("data-id",       `${curr.id}`);
+        article.setAttribute("tabindex",      "0");
+
+        // prepend
+        var prep = '';
+
+        if (curr.reblog) {
+          prep += `
+<div class="status__prepend">
+  <div class="status__prepend-icon-wrapper">
+    <i class="fa fa-retweet status__prepend-icon fa-fw"></i>
+  </div>
+  <span><a data-id="${curr.id}" href="https://${site}/@${user.acct}" class="status__display-name muted">
+    <bdi>
+      <strong>${user.username}</strong>
+    </bdi>
+  </a> boosted</span>
+</div>`;
+
+          curr = curr.reblog;
+        }
+
+        // date formatting
+        let created = new Date(curr.created_at);
+        let now     = new Date();
+
+        let date = new Intl.DateTimeFormat("en-US", {
+          month:  "short",
+          day:    "numeric",
+          year:   "numeric",
+          hour:   "numeric",
+          hour12:  false,
+          minute: "numeric"
+        }).format(created);
+
+        let diff = `${Math.round((now - created) / (1000 * 60 * 60 * 24))}d`;
+
+        // extras
+        var exts = '';
+
+        if (curr.card) {
+          exts += `
+<a href="${curr.card.url}" class="status-card compact" target="_blank" rel="noopener noreferrer">
+  <div class="status-card__image">
+    <canvas class="status-card__image-preview status-card__image-preview--hidden" width="32" height="32"></canvas>
+    <img src="${curr.card.image}" alt="" class="status-card__image-image">
+  </div>
+  <div class="status-card__content" lang="">
+    <strong class="status-card__title" title="${curr.card.title}">${curr.card.title}</strong>
+    <span class="status-card__host">${curr.card.provider_name}</span>
+  </div>
+</a>`;
+        }
+
+        for (let j = 0; j < curr.media_attachments.length; j++) {
+          let med = curr.media_attachments[j];
+
+          if (med.type === "image") {
+            exts += `
+<div class="media-gallery" style="aspect-ratio: 1.38235 / 1;">
+  <!--
+  <div class="spoiler-button spoiler-button--minified">
+    <button type="button" aria-label="Hide image" aria-hidden="true" title="Hide image" class="icon-button overlayed" style="font-size: 18px; width: 23.1429px; height: 23.1429px; line-height: 18px;" tabindex="0">
+      <i class="fa fa-eye-slash fa-fw" aria-hidden="true"></i>
+    </button>
+  </div>
+  -->
+  <div class="media-gallery__item media-gallery__item--tall media-gallery__item--wide">
+    <canvas class="media-gallery__preview media-gallery__preview--hidden" width="32" height="32"></canvas>
+    <a class="media-gallery__item-thumbnail" href="${med.url}" target="_blank" rel="noopener noreferrer">
+    <img src="${med.preview_url}" srcset="${med.url} ${med.meta.original.width}w, ${med.preview_url} ${med.meta.small.width}w" sizes="548px" alt="${med.description}" title="${med.description}" style="object-position: 50% 50%;" lang="en">
+    </a>
+    <div class="media-gallery__item__badges">
+      <span class="media-gallery__gifv__label">ALT</span>
+    </div>
+  </div>
+</div>`;
+          }
+
+          if (med.type === "gifv") {
+            exts += `
+<div class="media-gallery" style="aspect-ratio: 1.36519 / 1;">
+  <!--
+  <div class="spoiler-button spoiler-button--minified">
+    <button type="button" aria-label="Hide image" aria-hidden="true" title="Hide image" class="icon-button overlayed" style="font-size: 18px; width: 23.1429px; height: 23.1429px; line-height: 18px;" tabindex="0">
+      <i class="fa fa-eye-slash fa-fw" aria-hidden="true"></i>
+    </button>
+  </div>
+  -->
+  <div class="media-gallery__item media-gallery__item--tall media-gallery__item--wide">
+    <canvas class="media-gallery__preview" width="32" height="32"></canvas>
+    <div class="media-gallery__gifv">
+      <video class="media-gallery__item-gifv-thumbnail" role="application" src="${med.url}" playsinline="" loop="" lang="en"></video>
+    </div>
+    <div class="media-gallery__item__badges">
+      <span class="media-gallery__gifv__label">GIF</span>
+    </div>
+  </div>
+</div>`;
+          }
+
+          if (med.type === "video") {
+            exts += `
+<div role="menuitem" class="video-player inline" style="aspect-ratio: 16 / 9;" tabindex="0">
+  <canvas class="media-gallery__preview media-gallery__preview--hidden" width="32" height="32"></canvas>
+  <video src="${med.url}" poster="${med.preview_url}" preload="none" role="button" tabindex="0" volume="1" style="aspect-ratio: 16 / 9; width: 100%;" lang="en"></video>
+  <!--
+  <div class="spoiler-button spoiler-button--hidden">
+    <button type="button" class="spoiler-button__overlay">
+      <span class="spoiler-button__overlay__label">
+        <span>Media hidden</span>
+      </span>
+    </button>
+  </div>
+  -->
+  <div class="video-player__controls active">
+    <div class="video-player__seek">
+      <div class="video-player__seek__buffer"></div>
+      <div class="video-player__seek__progress"></div>
+      <span class="video-player__seek__handle" tabindex="0"></span>
+    </div>
+    <div class="video-player__buttons-bar">
+      <div class="video-player__buttons left">
+        <button type="button" title="Play" aria-label="Play" class="player-button">
+          <i class="fa fa-play fa-fw"></i>
+        </button>
+        <button type="button" title="Mute sound" aria-label="Mute sound" class="player-button">
+          <i class="fa fa-volume-up fa-fw"></i>
+        </button>
+        <div class="video-player__volume">
+          <div class="video-player__volume__current" style="width: 100%;"></div>
+          <span class="video-player__volume__handle" tabindex="0" style="left: 100%;"></span>
+        </div>
+      </div>
+      <div class="video-player__buttons right">
+        <button type="button" title="Hide video" aria-label="Hide video" class="player-button">
+          <i class="fa fa-eye-slash fa-fw"></i>
+        </button>
+        <button type="button" title="Expand video" aria-label="Expand video" class="player-button">
+          <i class="fa fa-expand fa-fw"></i>
+        </button>
+        <button type="button" title="Full screen" aria-label="Full screen" class="player-button">
+          <i class="fa fa-arrows-alt fa-fw"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>`;
+          }
+        }
+
+        article.innerHTML = `
+${prep}
+<div tabindex="-1">
+  <div class="status__wrapper status__wrapper-public focusable" tabindex="0" aria-label="${date}">
+    <div class="status status-public" data-id="${curr.id}">
+      <div class="status__info">
+        <!--
+        <a href="https://${site}/@${curr.account.acct}/${curr.id}" class="status__relative-time" target="_blank" rel="noopener noreferrer">
+          <span class="status__visibility-icon">
+            <i class="fa fa-globe" title="Public"></i>
+          </span>
+          <time datetime="${curr.created_at}" title="${date}">${diff}</time>
+        </a>
+        -->
+        <a href="https://${site}/@${curr.account.acct}" title="${user.acct}" class="status__display-name" target="_blank" rel="noopener noreferrer">
+          <div class="status__avatar">
+            <div class="account__avatar" style="width: 46px; height: 46px;">
+              <img src="${curr.account.avatar}" alt="${curr.account.acct}">
+            </div>
+          </div>
+          <span class="display-name">
+            <bdi>
+              <strong class="display-name__html">${curr.account.username}</strong>
+            </bdi>
+            <span class="display-name__account">@${curr.account.acct}</span>
+          </span>
+        </a>
+      </div>
+      <div class="status__content status__content--with-action" tabindex="0">
+        <div class="status__content__text status__content__text--visible translate" lang="en">
+          ${curr.content}
+        </div>
+      </div>
+      ${exts}
+      <div class="detailed-status__meta">
+        <a class="detailed-status__datetime" href="https://${site}/@${curr.account.acct}/${curr.id}" target="_blank" rel="noopener noreferrer">
+          <span>${date}</span>
+        </a> · 
+        <!--
+        <i class="fa fa-globe" title="Public"></i> · 
+        <a class="detailed-status__application" target="_blank" rel="noopener noreferrer">Web</a> · 
+        -->
+        <a class="detailed-status__link" href="https://${site}/@${curr.account.acct}/${curr.id}" target="_blank">
+          <i class="fa fa-reply"></i><span class="detailed-status__replies">
+            <span class="animated-number">
+              <span style="position: static; transform: translateY(0%);">
+                <span>${curr.replies_count}</span>
+              </span>
+            </span>
+          </span>
+        </a> · 
+        <a class="detailed-status__link" href="https://${site}/@${curr.account.acct}/${curr.id}/reblogs" target="_blank">
+          <i class="fa fa-retweet"></i><span class="detailed-status__reblogs">
+            <span class="animated-number">
+              <span style="position: static; transform: translateY(0%);">
+                <span>${curr.reblogs_count}</span>
+              </span>
+            </span>
+          </span>
+        </a> · 
+        <a class="detailed-status__link" href="https://${site}/@${curr.account.acct}/${curr.id}/favourites" target="_blank">
+          <i class="fa fa-star"></i><span class="detailed-status__favorites">
+            <span class="animated-number">
+              <span style="position: static; transform: translateY(0%);">
+                <span>${curr.favourites_count}</span>
+              </span>
+            </span>
+          </span>
+        </a>
+      </div>
+      <!--
+      <div class="status__action-bar">
+        <button type="button" aria-label="Reply" aria-hidden="false" title="Reply" class="status__action-bar__button icon-button icon-button--with-counter" style="font-size: 18px; width: auto; height: 23.1429px; line-height: 18px;" tabindex="0" onclick="window.open('https://${site}/@${curr.account.acct}/${curr.id}', '_blank')">
+          <i class="fa fa-reply fa-fw" aria-hidden="true"></i><span class="icon-button__counter">
+            <span class="animated-number">
+              <span style="position: static; transform: translateY(0%);">${curr.replies_count}</span>
+            </span>
+          </span>
+        </button>
+        <button type="button" aria-label="Boost" aria-hidden="false" title="Boost" class="status__action-bar__button icon-button icon-button--with-counter" style="font-size: 18px; width: auto; height: 23.1429px; line-height: 18px;" tabindex="0" onclick="window.open('https://${site}/@${curr.account.acct}/${curr.id}', '_blank')">
+          <i class="fa fa-retweet fa-fw" aria-hidden="true"></i><span class="icon-button__counter">
+            <span class="animated-number">
+              <span style="position: static; transform: translateY(0%);">${curr.reblogs_count}</span>
+            </span>
+          </span>
+        </button>
+        <button type="button" aria-label="Favourite" aria-hidden="false" title="Favourite" class="status__action-bar__button star-icon icon-button icon-buton--with-counter" style="font-size: 18px; width: auto; height: 23.1429px; line-height: 18px;" tabindex="0" onclick="window.open('https://${site}/${curr.id}/@${curr.account.acct}', '_blank')">
+          <i class="fa fa-star fa-fw" aria-hidden="true"></i><span class="icon-button__counter">
+            <span class="animated-number">
+              <span style="position: static; transform: translateY(-10%);">${curr.favourites_count}</span>
+            </span>
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>`;
+        div.appendChild(article);
+      }
+    }
+  </script>
+</head>
+
+<body onload="javascript:loadFeeds()">
+  <div id="placeholder" role="feed" class="item-list"></div>
+</body>
+</html>
